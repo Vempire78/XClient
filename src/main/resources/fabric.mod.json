@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "xclient",
+  "version": "${version}",
+  "name": "X Client",
+  "description": "A lightweight, mobile-friendly PvP and SMP quality-of-life client mod.",
+  "authors": ["X Client Team"],
+  "environment": "client",
+  "entrypoints": {
+    "client": ["dev.xclient.XClient"]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.10",
+    "minecraft": "~1.21.5",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
