@@ -2,13 +2,11 @@
   "schemaVersion": 1,
   "id": "xclient",
   "version": "${version}",
-  "name": "X Client",
-  "description": "A lightweight, mobile-friendly PvP and SMP quality-of-life client mod.",
-  "authors": ["X Client Team"],
+  "name": "XClient",
+  "description": "A customizable client-side utility and HUD mod.",
+  "authors": ["XClient"],
   "environment": "client",
-  "entrypoints": {
-    "client": ["dev.xclient.XClient"]
-  },
+  "entrypoints": { "client": ["dev.xclient.XClient"] },
   "depends": {
     "fabricloader": ">=0.16.10",
     "minecraft": "~1.21.5",
