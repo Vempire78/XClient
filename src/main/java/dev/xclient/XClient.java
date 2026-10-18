@@ -1,28 +1,30 @@
 
 package dev.xclient;
 
+import java.util.Locale;
+
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.item.ItemStack;
 import net.minecraft.text.Text;
+
 import org.lwjgl.glfw.GLFW;
 
 public final class XClient implements ClientModInitializer {
+
     private static final ModuleManager MODULES = new ModuleManager();
     private static final XClientConfig CONFIG = new XClientConfig();
 
     private static KeyBinding openMenuKey;
-    private static int leftCps, rightCps, tick;
-    private static final long[] leftClicks = new long[32];
-    private static final long[] rightClicks = new long[32];
-    private static int leftIndex, rightIndex;
 
     @Override
     public void onInitializeClient() {
@@ -41,68 +43,55 @@ public final class XClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             while (openMenuKey.wasPressed()) {
                 if (client.currentScreen == null) {
-                    client.setScreen(new XClientScreen(MODULES, CONFIG));
+                    client.setScreen(
+                        new XClientScreen(MODULES, CONFIG)
+                    );
                 }
-            }
-
-            tick++;
-            if (tick % 10 == 0) {
-                updateCps();
             }
         });
 
-        HudRenderCallback.EVENT.register((ctx, counter) -> renderHud(ctx));
-    }
-
-    private static void updateCps() {
-        long now = System.currentTimeMillis();
-        leftCps = count(leftClicks, now);
-        rightCps = count(rightClicks, now);
-    }
-
-    private static int count(long[] clicks, long now) {
-        int total = 0;
-
-        for (long time : clicks) {
-            if (time != 0 && now - time < 1000) {
-                total++;
-            }
-        }
-
-        return total;
-    }
-
-    public static void registerClick(boolean left) {
-        long now = System.currentTimeMillis();
-
-        if (left) {
-            leftClicks[leftIndex++ % leftClicks.length] = now;
-        } else {
-            rightClicks[rightIndex++ % rightClicks.length] = now;
-        }
+        HudRenderCallback.EVENT.register(
+            (context, tickCounter) -> renderHud(context)
+        );
     }
 
     private void renderHud(DrawContext context) {
         MinecraftClient mc = MinecraftClient.getInstance();
 
-        if (mc.player == null || mc.options.hudHidden) {
+        if (mc.player == null
+                || mc.world == null
+                || mc.options.hudHidden) {
             return;
         }
 
         int color = 0xFF000000 | (CONFIG.hudColor & 0xFFFFFF);
 
         if (MODULES.isEnabled("FPS")) {
-            text(context, "FPS: " + mc.getCurrentFps(),
-                CONFIG.fpsX, CONFIG.fpsY, color);
+            drawText(
+                context,
+                "FPS: " + mc.getCurrentFps(),
+                CONFIG.fpsX,
+                CONFIG.fpsY,
+                color
+            );
         }
 
         if (MODULES.isEnabled("Coordinates")) {
-            text(context,
-                String.format("XYZ: %.1f %.1f %.1f",
-                    mc.player.getX(),
-                    mc.player.getY(),
-                    mc.player.getZ()),
-                CONFIG.coordsX, CONFIG.coordsY, color);
+            String coordinates = String.format(
+                Locale.ROOT,
+                "XYZ: %.1f %.1f %.1f",
+                mc.player.getX(),
+                mc.player.getY(),
+                mc.player.getZ()
+            );
+
+            drawText(
+                context,
+                coordinates,
+                CONFIG.coordsX,
+                CONFIG.coordsY,
+                color
+            );
         }
 
         if (MODULES.isEnabled("Armor Status")) {
@@ -126,22 +115,43 @@ public final class XClient implements ClientModInitializer {
         }
     }
 
-    private void text(DrawContext context, String message,
-                      int x, int y, int color) {
+    private void drawText(
+            DrawContext context,
+            String message,
+            int x,
+            int y,
+            int color) {
+
+        MinecraftClient mc = MinecraftClient.getInstance();
+
         context.drawText(
-            MinecraftClient.getInstance().textRenderer,
+            mc.textRenderer,
             Text.literal(message),
-            x, y, color, true
+            x,
+            y,
+            color,
+            true
         );
     }
 
-    private void renderArmor(DrawContext context,
-                             MinecraftClient mc, int color) {
-        int y = CONFIG.armorY;
-        int x = CONFIG.armorX;
+    private void renderArmor(
+            DrawContext context,
+            MinecraftClient mc,
+            int color) {
 
-        // Minecraft 1.21.5: read armor from player inventory.
-        for (ItemStack stack : mc.player.getInventory().armor) {
+        int x = CONFIG.armorX;
+        int y = CONFIG.armorY;
+
+        EquipmentSlot[] slots = {
+            EquipmentSlot.HEAD,
+            EquipmentSlot.CHEST,
+            EquipmentSlot.LEGS,
+            EquipmentSlot.FEET
+        };
+
+        for (EquipmentSlot slot : slots) {
+            ItemStack stack = mc.player.getEquippedStack(slot);
+
             context.drawItem(stack, x, y - 2);
 
             String name = stack.isEmpty()
@@ -151,28 +161,56 @@ public final class XClient implements ClientModInitializer {
             String durability = "";
 
             if (!stack.isEmpty() && stack.isDamageable()) {
-                durability = " "
-                    + (stack.getMaxDamage() - stack.getDamage())
+                int remaining =
+                    stack.getMaxDamage() - stack.getDamage();
+
+                durability = " " + remaining
                     + "/" + stack.getMaxDamage();
             }
 
-            text(context, name + durability, x + 20, y, color);
+            drawText(
+                context,
+                name + durability,
+                x + 20,
+                y,
+                color
+            );
+
             y += 18;
         }
     }
 
-    private void renderPotions(DrawContext context,
-                               MinecraftClient mc, int color) {
+    private void renderPotions(
+            DrawContext context,
+            MinecraftClient mc,
+            int color) {
+
         int y = CONFIG.potionY;
 
-        for (StatusEffectInstance effect : mc.player.getStatusEffects()) {
-            String name = effect.getEffectType()
-                .value().getName().getString();
+        for (StatusEffectInstance effect
+                : mc.player.getStatusEffects()) {
 
-            int seconds = effect.getDuration() / 20;
-            String timer = String.format(
-                "%d:%02d", seconds / 60, seconds % 60
-            );
+            String name = effect.getEffectType()
+                .value()
+                .getName()
+                .getString();
+
+            int durationTicks = effect.getDuration();
+
+            String timer;
+
+            if (durationTicks < 0) {
+                timer = "∞";
+            } else {
+                int seconds = durationTicks / 20;
+
+                timer = String.format(
+                    Locale.ROOT,
+                    "%d:%02d",
+                    seconds / 60,
+                    seconds % 60
+                );
+            }
 
             String level = effect.getAmplifier() > 0
                 ? " " + (effect.getAmplifier() + 1)
@@ -180,82 +218,137 @@ public final class XClient implements ClientModInitializer {
 
             String line = name + level + "  " + timer;
 
-            if ("JoZo".equals(CONFIG.potionPreset)) {
+            if ("JoZo".equalsIgnoreCase(CONFIG.potionPreset)) {
                 line = "[" + timer + "] " + name + level;
-            } else if ("Lunar".equals(CONFIG.potionPreset)) {
+            } else if ("Lunar".equalsIgnoreCase(CONFIG.potionPreset)) {
                 line = name + level + "  " + timer;
-            } else if ("Feather".equals(CONFIG.potionPreset)) {
+            } else if ("Feather".equalsIgnoreCase(CONFIG.potionPreset)) {
                 line = "◆ " + name + level + "  " + timer;
             }
 
-            text(context, line, CONFIG.potionX, y, color);
+            drawText(
+                context,
+                line,
+                CONFIG.potionX,
+                y,
+                color
+            );
+
             y += 10;
         }
     }
 
-    private void renderDurability(DrawContext context,
-                                  MinecraftClient mc, int color) {
+    private void renderDurability(
+            DrawContext context,
+            MinecraftClient mc,
+            int color) {
+
         ItemStack stack = mc.player.getMainHandStack();
 
-        if (!stack.isEmpty()) {
-            String line = stack.getName().getString();
-
-            if (stack.isDamageable()) {
-                line += " "
-                    + (stack.getMaxDamage() - stack.getDamage())
-                    + "/" + stack.getMaxDamage();
-            }
-
-            text(context, line,
-                CONFIG.durabilityX, CONFIG.durabilityY, color);
+        if (stack.isEmpty()) {
+            return;
         }
+
+        String line = stack.getName().getString();
+
+        if (stack.isDamageable()) {
+            int remaining =
+                stack.getMaxDamage() - stack.getDamage();
+
+            line += " " + remaining
+                + "/" + stack.getMaxDamage();
+        }
+
+        drawText(
+            context,
+            line,
+            CONFIG.durabilityX,
+            CONFIG.durabilityY,
+            color
+        );
     }
 
-    private void renderKeys(DrawContext context,
-                            MinecraftClient mc, int color) {
+    private void renderKeys(
+            DrawContext context,
+            MinecraftClient mc,
+            int color) {
+
         int x = CONFIG.keysX;
         int y = CONFIG.keysY;
 
-        String w = key(mc.options.forwardKey.isPressed(), "W");
-        String a = key(mc.options.leftKey.isPressed(), "A");
-        String s = key(mc.options.backKey.isPressed(), "S");
-        String d = key(mc.options.rightKey.isPressed(), "D");
+        String w = keyLabel(
+            mc.options.forwardKey.isPressed(), "W"
+        );
 
-        text(context, "   [" + w + "]", x, y, color);
-        text(context, "[" + a + "] [" + s + "] [" + d + "]",
-            x, y + 12, color);
+        String a = keyLabel(
+            mc.options.leftKey.isPressed(), "A"
+        );
 
-        text(context,
-            "Jump: " + key(mc.options.jumpKey.isPressed(), "ON")
+        String s = keyLabel(
+            mc.options.backKey.isPressed(), "S"
+        );
+
+        String d = keyLabel(
+            mc.options.rightKey.isPressed(), "D"
+        );
+
+        drawText(context, "   [" + w + "]", x, y, color);
+
+        drawText(
+            context,
+            "[" + a + "] [" + s + "] [" + d + "]",
+            x,
+            y + 12,
+            color
+        );
+
+        drawText(
+            context,
+            "Jump: "
+                + keyLabel(mc.options.jumpKey.isPressed(), "ON")
                 + "  Sneak: "
-                + key(mc.options.sneakKey.isPressed(), "ON"),
-            x, y + 24, color);
-
-        text(context,
-            "LMB CPS: " + leftCps + "  RMB CPS: " + rightCps,
-            x, y + 36, color);
+                + keyLabel(mc.options.sneakKey.isPressed(), "ON"),
+            x,
+            y + 24,
+            color
+        );
     }
 
-    private String key(boolean pressed, String label) {
+    private String keyLabel(boolean pressed, String label) {
         return pressed ? "§a" + label + "§r" : label;
     }
 
-    private void renderInfo(DrawContext context,
-                            MinecraftClient mc, int color) {
-        String server = mc.getCurrentServerEntry() == null
-            ? "Singleplayer"
-            : mc.getCurrentServerEntry().address;
+    private void renderInfo(
+            DrawContext context,
+            MinecraftClient mc,
+            int color) {
 
-        text(context, "Server: " + server,
-            CONFIG.infoX, CONFIG.infoY, color);
+        String server = "Singleplayer";
+
+        if (mc.getCurrentServerEntry() != null) {
+            server = mc.getCurrentServerEntry().address;
+        }
+
+        drawText(
+            context,
+            "Server: " + server,
+            CONFIG.infoX,
+            CONFIG.infoY,
+            color
+        );
 
         if (mc.getNetworkHandler() != null) {
             var entry = mc.getNetworkHandler()
                 .getPlayerListEntry(mc.player.getUuid());
 
             if (entry != null) {
-                text(context, "Ping: " + entry.getLatency() + " ms",
-                    CONFIG.infoX, CONFIG.infoY + 12, color);
+                drawText(
+                    context,
+                    "Ping: " + entry.getLatency() + " ms",
+                    CONFIG.infoX,
+                    CONFIG.infoY + 12,
+                    color
+                );
             }
         }
     }
@@ -263,5 +356,5 @@ public final class XClient implements ClientModInitializer {
     public static XClientConfig config() {
         return CONFIG;
     }
-    }
-                 
+                }
+                
