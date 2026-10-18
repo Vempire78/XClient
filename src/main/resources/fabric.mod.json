@@ -3,7 +3,7 @@
   "id": "xclient",
   "version": "${version}",
   "name": "XClient",
-  "description": "A customizable client-side utility and HUD mod.",
+  "description": "Customizable client-side PvP HUD.",
   "authors": ["XClient"],
   "environment": "client",
   "entrypoints": { "client": ["dev.xclient.XClient"] },
